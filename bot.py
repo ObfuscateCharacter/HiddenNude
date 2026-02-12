@@ -39,7 +39,6 @@ def return_user_log(chat_id, log_data):
 
 
 async def addToDatabase(fname, Data):
-    print (fname)
     async with aiofiles.open(fname,mode = "rb+") as f:
         content: bytes = await f.read()
         media_json: dict[str, str] = orjson.loads(content)
@@ -54,7 +53,7 @@ async def user_log(message: Message):
     if not result_log:
         await bot.send_message(message.chat.id, "شما تا به حال هیچ مدیایی ارسال نکردید")
     else:
-        print (result_log) 
+        await bot.send_message(message.chat.id, f"تعداد مدیا هایی که تا الان ارسال کردید {len(result_log)}")
 
 @dp.message(F.chat.type == ChatType.PRIVATE and F.content_type.in_({"video", "photo"}))
 async def command_start_handler(message: Message) -> None:
@@ -78,7 +77,6 @@ async def sendMedia(message: Message):
     if await checkJoin(message.chat.id):
         target = message.text.split(' ')[1]
         allNude = await return_file_content("nude.json")
-        print (allNude)
         if target.startswith("photo"):
             await bot.send_photo(message.chat.id, photo = allNude[target])
         else:

@@ -3,12 +3,15 @@ import asyncio
 import aiofiles
 import orjson
 
+import string
+import random
 from aiogram import Bot, Router, filters, F, Dispatcher
 from aiogram.filters import Command
-from aiogram.types import Message, InlineQuery, InlineQueryResultArticle, InputTextMessageContent
+from aiogram.types import Message, InlineQuery, InlineQueryResultArticle, InputTextMessageContent,InputMediaPhoto, InputMediaVideo
+from aiogram.utils.media_group import MediaGroupBuilder
 from aiogram.enums import ChatType
 from aiogram.exceptions import TelegramBadRequest
-
+from aiogram_media_group import media_group_handler
 
 TOKEN = "7968510511:AAEFty5Tup8aRaYgQrb1VdyXXwAXwdlkoCI"
 bot = Bot(token=TOKEN)
@@ -36,7 +39,8 @@ def return_user_log(chat_id, log_data):
    except:
        return {}
 
-
+def makeGroupMediaObject(list_file_id):
+     return [InputMediaPhoto(media = f.replace("photo-",'')) if f.startswith('photo') else InputMediaVideo(media = f.replace('video-','')) for f in list_file_id]
 
 async def addToDatabase(fname, Data):
     async with aiofiles.open(fname,mode = "rb+") as f:
@@ -54,6 +58,16 @@ async def removeMedia(fname, key):
         del file_json[key]
         await r.seek(0)
         await r.write(orjson.dumps(file_json, option = orjson.OPT_INDENT_2))
+
+
+
+@dp.message(F.media_group_id, F.content_type.in_({'photo','video'}))
+@media_group_handler
+async def album_handler(messages):
+    random_name = 'list-'+''.join(random.sample(string.ascii_letters, 8))
+    result = ['photo-'+m.photo[0].file_id if m.photo else 'video-'+m.video.file_id for m in messages]
+    await addToDatabase("nude.json",{random_name:result})
+    await bot.send_message(messages[0].chat.id, f"https://t.me/HiddenNude_Bot?start={random_name}")
 
 
 @dp.message(F.chat.type == ChatType.PRIVATE and F.content_type.in_({"video", "photo"}))
@@ -78,20 +92,26 @@ async def command_start_handler(message: Message) -> None:
 async def sendMedia(message: Message):
     if await checkJoin(message.chat.id):
         target = message.text.split(' ')[1]
-        allNude = await return_file_content("nude.json")
-        if target.startswith("photo"):
-            await bot.send_photo(message.chat.id, photo = allNude[target])
+        task_allNude,task_user_received = asyncio.create_task(return_file_content("nude.json")),asyncio.create_task(return_file_content("user-recevied.json"))
+        await task_user_received, task_allNude
+        if str(message.chat.id) not in task_user_received.result():
+              await addToDatabase("user-recevied.json",{str(message.chat.id):[target]})
         else:
-            await bot.send_video(message.chat.id, video = allNude[target])
+              task_user_received.result()[str(message.chat.id)].append(target)
+              await addToDatabase("user-recevied.json",{str(message.chat.id):task_user_received.result()[str(message.chat.id)]})
+        if target.startswith("photo"):
+            await bot.send_photo(message.chat.id, photo = task_allNude.result()[target])
+        elif target.startswith("video"):
+            await bot.send_video(message.chat.id, video = task_allNude.result()[target])
+        else:
+            await bot.send_media_group(message.chat.id, media = makeGroupMediaObject(task_allNude.result()[target]))
     else:
         await bot.send_message(chat_id = message.chat.id, text = "لطفا ابتدا در کانال\n@BdsmUniversity\n عضود شوید و سپس دوباره از طریق لینک مدیا ربات را استارت بکنید")
 
 
 async def main() -> None:
-    
     await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-          
